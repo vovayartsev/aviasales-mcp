@@ -1,4 +1,5 @@
 # Environment
+.serena
 .env
 .env.*
 !.env.example

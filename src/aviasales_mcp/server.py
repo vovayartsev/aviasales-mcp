@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 import logging
+import os
+from typing import Any
 
 from fastmcp import FastMCP
+from starlette.middleware import Middleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 
 from aviasales_mcp.config import settings
 from aviasales_mcp.tools.flights import (
@@ -47,8 +53,32 @@ mcp.tool()(lookup_cities)
 mcp.tool()(lookup_countries)
 
 
+class TokenAuthMiddleware(BaseHTTPMiddleware):
+    """Require ?token=<TOKEN> query param when TOKEN env var is set."""
+
+    def __init__(self, app: Any, token: str) -> None:
+        super().__init__(app)
+        self._token = token
+
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
+        if request.query_params.get("token") != self._token:
+            return Response("Unauthorized", status_code=401)
+        return await call_next(request)
+
+
 def main() -> None:
-    mcp.run(transport="stdio")
+    port = os.environ.get("PORT")
+    token = os.environ.get("TOKEN")
+
+    if port:
+        middleware = [Middleware(TokenAuthMiddleware, token=token)] if token else None
+        mcp.run(
+            transport="streamable-http",
+            port=int(port),
+            middleware=middleware,
+        )
+    else:
+        mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":
